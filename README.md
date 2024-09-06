@@ -1,2 +1,1 @@
-# brain-training
-As the name suggests, exercise your brain.
+> 脑子不好， 就得多练

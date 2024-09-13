@@ -1,6 +1,9 @@
 cmake_minimum_required (VERSION 3.8)
 project ("brain-training")
 
+set(CMAKE_CXX_STANDARD_REQUIRED true)
+set(CMAKE_CXX_STANDARD 17)
+
 set(${PROJECT_NAME}_INCLUDE )
 add_library(${PROJECT_NAME}_static INTERFACE)
 target_include_directories(${PROJECT_NAME}_static INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/case)

@@ -10,10 +10,11 @@
 
 typedef struct CacheNode{
     CacheNode(int key, int value)
-    : key(key), value(value), previous(nullptr), next(nullptr){}
+    : key(key), value(value), usecount(0), previous(nullptr), next(nullptr){}
 
     int key;
     int value;
+    int usecount;
     CacheNode* previous;
     CacheNode* next;
 }*CacheNodePtr;
@@ -22,75 +23,85 @@ class LFUCache {
 public:
     LFUCache(int capacity)
         : cache_capacity_(capacity)
-        , cache_link_head_(nullptr)
         , cache_link_tail_(nullptr)
     {
+    }
+
+    void move_forward(CacheNode* current_node)
+    {
+        auto pos = current_node, prev = pos->previous;
+        for(;prev != nullptr && prev->usecount <= pos->usecount; )
+        {
+            if (pos == cache_link_tail_)
+                cache_link_tail_ = prev;
+
+            prev->next = pos->next;
+            pos->previous = prev->previous;
+            prev->previous = pos;
+            pos->next = prev;
+
+            if (pos->previous == nullptr){
+                break;
+            }
+
+            pos = pos->previous;
+            prev = pos->previous;
+        }
     }
     
     int get(int key) {
         auto itr = cache_map_table_.find(key);
         if (itr != cache_map_table_.end())
         {
-            if (itr->second == cache_link_tail_){
-                cache_link_tail_->previous->next = nullptr;
-                cache_link_tail_ = cache_link_tail_->previous;
-            }
-
-            if(itr->second != cache_link_head_){
-                itr->second->next = cache_link_head_;
-                cache_link_head_->previous = itr->second;
-                cache_link_head_ = itr->second;  
-                cache_link_head_->previous =nullptr;
-            }
-
+            itr->second->usecount += 1;
+            move_forward(itr->second);
             return itr->second->value;
         }else{
             return -1;
         }
-
     }
 
-    void pop_tail_node(){
+    void pop_tail(){
         auto itr = cache_map_table_.find(cache_link_tail_->key);
         if (itr == cache_map_table_.end())
         {
             return;
         }
-        cache_link_tail_->previous->next = nullptr;
         cache_link_tail_ = cache_link_tail_->previous;
+        if (cache_link_tail_ != nullptr)
+            cache_link_tail_->next = nullptr;
         delete itr->second;
         cache_map_table_.erase(itr);
     }
     
     void put(int key, int value) {
+        CacheNodePtr node  = nullptr;
         auto itr = cache_map_table_.find(key);
         if (itr != cache_map_table_.end())
         {
+            node = itr->second;
             itr->second->value = value;
+            itr->second->usecount += 1;
         }else{
             if (cache_map_table_.size() >= cache_capacity_){
                 // 缓存满了
-                pop_tail_node();
+                pop_tail();
             }
 
-            CacheNodePtr node = new CacheNode(key, value);
+            node = new CacheNode(key, value);
             cache_map_table_.emplace(key, node);
-            node->next = cache_link_head_;
-            if (cache_link_head_ != nullptr)
-                cache_link_head_->previous = node;
-            cache_link_head_ = node;
-
-            if (cache_link_tail_ == nullptr){
-                cache_link_tail_ = cache_link_head_;
+            node->previous = cache_link_tail_;
+            if (cache_link_tail_ != nullptr){
+                cache_link_tail_->next = node;
             }
+            cache_link_tail_ = node;
         }
-        
+        move_forward(node);
     }
 
 private:
     size_t cache_capacity_;
     std::unordered_map<int, CacheNodePtr> cache_map_table_;
-    CacheNodePtr cache_link_head_;
     CacheNodePtr cache_link_tail_;
 };
 

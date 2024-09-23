@@ -18,9 +18,8 @@ typedef struct CacheNode{
 #ifdef VER_1
      ,previous(nullptr), next(nullptr)
 #else
-    ,order(microseconds())
+    ,order(0)
 #endif
-     
      {}
 
     int key;
@@ -32,27 +31,19 @@ typedef struct CacheNode{
 #else
     uint64_t order;
 
-    uint64_t microseconds(){
-        return std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::system_clock::now()).time_since_epoch().count();
-    }
 #endif 
-
     void increase_usecount(){
         ++usecount;
-#ifndef VER_1
-        order = microseconds();
-#endif
     }
 
 private:
     int usecount;
     friend struct CacheNodeCmp;
-
 }*CacheNodePtr;
 
-
 struct CacheNodeCmp{
-    bool operator()(const CacheNodePtr& lhs, const CacheNodePtr& rhs) const{
+    bool operator()(const CacheNodePtr& lhs,const CacheNodePtr& rhs) const
+    {
         if (lhs->usecount == rhs->usecount)
             return lhs->order < rhs->order;
         else return lhs->usecount < rhs->usecount;
@@ -61,12 +52,16 @@ struct CacheNodeCmp{
 
 
 
+
+
 class LFUCache {
 public:
     LFUCache(int capacity)
         : cache_capacity_(capacity)
         , cache_link_tail_(nullptr)
+        , time_(0)
     {
+
     }
 
 #ifdef VER_1
@@ -149,11 +144,11 @@ public:
         auto itr = cache_map_table_.find(key);
         if (itr != cache_map_table_.end())
         {
-            auto cnode = itr->second;
-            sorted_cached_.erase(cnode);
-            cnode->increase_usecount();
-            sorted_cached_.insert(cnode);
-            return cnode->value;
+            sorted_cached_.erase(itr->second);
+            itr->second->order = ++time_;
+            itr->second->increase_usecount();
+            sorted_cached_.insert(itr->second);
+            return itr->second->value;
         }else{
             return -1;
         }
@@ -164,24 +159,24 @@ public:
         auto itr = cache_map_table_.find(key);
         if (itr != cache_map_table_.end())
         {
-            auto cnode = itr->second;
-            sorted_cached_.erase(cnode);
-            cnode->value =value;
-            cnode->increase_usecount();
-            sorted_cached_.insert(cnode);
-
+            sorted_cached_.erase(itr->second);
+            itr->second->increase_usecount();
+            itr->second->order = ++time_;
+            itr->second->value =value;
+            sorted_cached_.insert(itr->second);
         }else{
             if (cache_map_table_.size() >= cache_capacity_){
                 // 缓存满了
                 const auto itersorted = sorted_cached_.begin();
                 CacheNodePtr cnode  = *itersorted;
                 cache_map_table_.erase(cnode->key);
-                sorted_cached_.erase(cnode);
+                sorted_cached_.erase(itersorted);
                 delete cnode;
             }
 
             CacheNodePtr node = new CacheNode(key, value);
             node->increase_usecount();
+            node->order = ++time_;
             cache_map_table_.emplace(key, node);
             sorted_cached_.insert(node);
         }
@@ -193,6 +188,7 @@ private:
     size_t cache_capacity_;
     std::set<CacheNodePtr,CacheNodeCmp> sorted_cached_;
     std::unordered_map<int, CacheNodePtr> cache_map_table_;
+    uint64_t time_;
     CacheNodePtr cache_link_tail_;
 };
 
